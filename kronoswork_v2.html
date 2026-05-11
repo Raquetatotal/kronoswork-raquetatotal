@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>KronosWork — Sistema de Marcación</title>
+<title>SportHaus — Sistema de Marcación</title>
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&family=Exo+2:wght@300;400;600;800&display=swap" rel="stylesheet">
 <style>
 /* ===================== VARIABLES ===================== */
@@ -462,7 +462,7 @@ tbody td{padding:9px 12px;font-size:.8rem;color:var(--text)}
 
 <!-- HEADER -->
 <div class="header">
-  <div class="logo">KRONOS<b>WORK</b><span class="vtag">v2.0</span></div>
+  <div class="logo">SPORT<b>HAUS</b><span class="vtag">v1.0</span></div>
   <div class="header-sep"></div>
   <div class="header-info">
     <div class="ip-chip" id="headerIp">Detectando IP...</div>
@@ -569,7 +569,7 @@ tbody td{padding:9px 12px;font-size:.8rem;color:var(--text)}
       <div class="form-section">
         <h3>+ Nueva Empresa</h3>
         <div class="form-row c2">
-          <div class="fg-inline"><label>Nombre de la Empresa</label><input type="text" id="newEmpresaName" placeholder="Ej: Raqueta Total Guayaquil"></div>
+          <div class="fg-inline"><label>Nombre de la Empresa</label><input type="text" id="newEmpresaName" placeholder="Ej: SportHaus Guayaquil"></div>
           <div class="fg-inline"><label>Localidad / Sucursal</label><input type="text" id="newEmpresaLocal" placeholder="Ej: Guayaquil Centro"></div>
         </div>
         <div class="form-row c2">
@@ -743,7 +743,8 @@ tbody td{padding:9px 12px;font-size:.8rem;color:var(--text)}
       </div>
       <div id="repTable"></div>
       <div class="action-bar" style="margin-top:18px">
-        <button class="btn-sm bs-export" style="padding:9px 18px" onclick="exportAllCSV()">📥 EXPORTAR TODO CSV</button>
+        <a class="btn-sm bs-export" href="https://docs.google.com/spreadsheets/d/1WaIBUuMclLEeLtblsqOeTgKA8vfugqSWbyAK7w0_9BM/edit" target="_blank" style="padding:9px 18px;text-decoration:none">📊 VER EN GOOGLE SHEETS</a>
+        <button class="btn-sm bs-export" style="padding:9px 18px" onclick="exportAllCSV()">📥 Descargar CSV (respaldo)</button>
         <button class="btn-sm bs-del" style="padding:9px 18px" onclick="clearOldData()">🗑 LIMPIAR DATOS ANTERIORES</button>
       </div>
       <div style="margin-top:14px;padding:12px;background:rgba(0,200,255,.05);border:1px solid rgba(0,200,255,.15);border-radius:8px;font-size:.72rem;color:var(--text-dim)">
@@ -833,7 +834,7 @@ tbody td{padding:9px 12px;font-size:.8rem;color:var(--text)}
       <div class="form-section">
         <h3>⚙ Configuración General</h3>
         <div class="form-row c2">
-          <div class="fg-inline"><label>Nombre del Sistema / Organización</label><input type="text" id="cfgOrg" placeholder="KronosWork — Raqueta Total"></div>
+          <div class="fg-inline"><label>Nombre del Sistema / Organización</label><input type="text" id="cfgOrg" placeholder="SportHaus Ecuador"></div>
           <div class="fg-inline"><label>Nueva contraseña Admin</label><input type="password" id="cfgPass" placeholder="Dejar vacío = sin cambio"></div>
         </div>
         <div style="margin-top:16px;display:flex;gap:10px;flex-wrap:wrap">
@@ -969,7 +970,8 @@ tbody td{padding:9px 12px;font-size:.8rem;color:var(--text)}
   </div>
 
   <div class="action-bar">
-    <button class="btn-sm bs-export" style="padding:9px 20px" onclick="exportMyCSV()">📥 EXPORTAR MIS MARCACIONES</button>
+    <!-- CSV sigue disponible como respaldo, pero los datos ya están en Google Sheets en tiempo real -->
+    <button class="btn-sm bs-export" style="padding:9px 20px" onclick="exportMyCSV()">📥 Descargar mis marcaciones (CSV)</button>
   </div>
 </div>
 
@@ -990,22 +992,97 @@ const MAX_EMPLOYEES = 200; // soft cap — localStorage handles more, this is a 
 
 // ============ STORAGE ============
 const K = {
-  cfg:'kw2_config', companies:'kw2_companies',
-  shifts:'kw2_shifts', employees:'kw2_employees',
-  records:'kw2_records', ipAlerts:'kw2_ip_alerts'
+  cfg:'sh1_config', companies:'sh1_companies',
+  shifts:'sh1_shifts', employees:'sh1_employees',
+  records:'sh1_records', ipAlerts:'sh1_ip_alerts'
 };
+// ═══════════════════════════════════════════════════════════════════
+// BLOQUE 1 — PERSISTENCIA EN LA NUBE (JSONBin)
+// Guarda la configuración (empresas, empleados, turnos) en JSONBin
+// para que cualquier dispositivo tenga siempre los datos actualizados.
+// ═══════════════════════════════════════════════════════════════════
+
+// ID del Bin en JSONBin — tu "base de datos" en la nube
+const JSONBIN_ID  = '6a0206eeadc21f119a8556f8';
+// Clave secreta para autenticarte en JSONBin (perfil → API Keys)
+const JSONBIN_KEY = '$2a$10$YiRJj8Ux5qz/kDIRTILBF.WKOU6xJhiAR45gg8aBzQ4BH0SNY7ziW';
+// URL completa construida automáticamente con el ID de arriba
+const JSONBIN_URL = `https://api.jsonbin.io/v3/b/${JSONBIN_ID}`;
+
+// ── BLOQUE 2 — GOOGLE SHEETS EN TIEMPO REAL ─────────────────────
+// URL del Apps Script desplegado en tu Google Sheet.
+// Cada marcación se envía aquí y aparece como una fila nueva en el Sheet.
+// Tu jefe solo abre el Sheet y ve todo sin descargar nada.
+const SHEETS_URL = 'https://script.google.com/macros/s/AKfycbzY-XTwzlC3-m4gWvwEdj2mB58mcwby_ZsEBGG2jz-A2Iyd56Coq1cip257Fc8X1T3fVA/exec';
+
+let _remoteCache = null; // caché en memoria para no descargar JSONBin en cada lectura
+let _pushTimer   = null; // temporizador para agrupar varios cambios en una sola subida
+
+// Descarga los datos actuales desde JSONBin.
+// Si ya descargó en esta sesión, devuelve la caché (más rápido).
+async function fetchRemote(){
+  if(_remoteCache) return _remoteCache;
+  try{
+    const r = await fetch(JSONBIN_URL+'/latest',{headers:{'X-Master-Key':JSONBIN_KEY}});
+    const j = await r.json();
+    _remoteCache = j.record || {};
+    return _remoteCache;
+  }catch(e){ console.warn('JSONBin fetch error:',e); return {}; }
+}
+
+// Sube todos los datos locales a JSONBin.
+// Se llama automáticamente 0.8s después de cualquier cambio del admin.
+async function pushRemote(){
+  _remoteCache = null; // invalida caché para que la próxima lectura sea fresca
+  const payload = {};
+  Object.values(K).forEach(k=>{ const v=localStorage.getItem(k); payload[k]=v?JSON.parse(v):null; });
+  try{
+    await fetch(JSONBIN_URL,{
+      method:'PUT',
+      headers:{'Content-Type':'application/json','X-Master-Key':JSONBIN_KEY},
+      body:JSON.stringify(payload)
+    });
+  }catch(e){ console.warn('JSONBin push error:',e); }
+}
+
+// Envía una marcación al Google Sheet en tiempo real.
+// Se llama solo cuando un empleado confirma entrada/salida/etc.
+// El Sheet se actualiza instantáneamente — el jefe lo ve sin descargar nada.
+async function pushToSheets(rec){
+  try{
+    await fetch(SHEETS_URL,{
+      method:'POST',
+      // mode no-cors necesario para llamadas desde GitHub Pages a Apps Script
+      mode:'no-cors',
+      headers:{'Content-Type':'application/json'},
+      body:JSON.stringify(rec)
+    });
+  }catch(e){ console.warn('Sheets push error:',e); }
+}
+
+// sv — guarda un dato en localStorage Y programa subida a JSONBin.
+// Reemplaza la función original que solo guardaba en localStorage.
+function sv(k,v){
+  try{
+    localStorage.setItem(k,JSON.stringify(v)); // guarda local inmediato
+    clearTimeout(_pushTimer);
+    _pushTimer = setTimeout(pushRemote, 800);  // sube a JSONBin tras 0.8s de inactividad
+  }catch(e){ showToast('Error al guardar: '+e.message,'e'); }
+}
+
+// ld — lee un dato del localStorage (sin cambios respecto al original).
+// La descarga desde JSONBin ya pobló el localStorage al arrancar la app.
 function ld(k,d){try{const v=localStorage.getItem(k);return v?JSON.parse(v):d}catch{return d}}
-function sv(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){showToast('Error al guardar: '+e.message,'e')}}
 function migrate(){
   // Migrate from v1 if exists
-  const old_cfg = localStorage.getItem('kw_config');
+  const old_cfg = localStorage.getItem('sh_old_config');
   if(old_cfg && !localStorage.getItem(K.cfg)){
     showToast('Detectando datos v1 — migrando...','info');
     try{
       const oc=JSON.parse(old_cfg);
-      const oe=ld('kw_employees',[]);
-      const os=ld('kw_shifts',[]);
-      const or_=ld('kw_records',[]);
+      const oe=ld('sh_old_employees',[]);
+      const os=ld('sh_old_shifts',[]);
+      const or_=ld('sh_old_records',[]);
       // Create default company from config
       const co={id:'co_migrated',name:oc.company||'Empresa Principal',color:'#00c8ff',localidad:'Principal',active:true};
       const companies=[co];
@@ -1013,7 +1090,7 @@ function migrate(){
       const employees=oe.map(e=>({...e,companyId:'co_migrated',companyName:co.name}));
       const records=or_.map(r=>({...r,companyId:'co_migrated',companyName:co.name}));
       sv(K.companies,companies);sv(K.shifts,shifts);sv(K.employees,employees);sv(K.records,records);
-      sv(K.cfg,{...oc,version:SCHEMA_VERSION,org:'KronosWork'});
+      sv(K.cfg,{...oc,version:SCHEMA_VERSION,org:'SportHaus'});
       showToast('Migración completada ✓','s');
     }catch(e){console.error('Migration failed',e)}
   }
@@ -1034,23 +1111,23 @@ function loadAll(){
   // Seed demo data if empty
   if(companies.length===0){
     companies=[
-      {id:'co1',name:'Raqueta Total Guayaquil',localidad:'Guayaquil Centro',color:'#00c8ff',active:true},
-      {id:'co2',name:'Raqueta Total Quito',localidad:'Quito Norte',color:'#00ff9d',active:true}
+      {id:'sh1',name:'SportHaus Guayaquil',localidad:'Kennedy Norte',color:'#f97316',supervisor:'',supervisorEmail:'',active:true},
+      {id:'sh2',name:'SportHaus Quito',localidad:'Cumbayá',color:'#a78bfa',supervisor:'',supervisorEmail:'',active:true}
     ];
     shifts=[
-      {id:'sh1',companyId:'co1',name:'Turno 40h L-V 7h + Sáb 4h',type:'fijo',desc:'40h: lunes a viernes 7h + sábado 4h',tolerance:10,hoursWeek:39,
-        days:[1,2,3,4,5,6],start:'08:00',end:'15:00',breakStart:'12:00',breakEnd:'12:30',
+      {id:'shs1',companyId:'sh1',name:'Turno Mañana GYE',type:'fijo',desc:'Jornada completa lunes a sábado',tolerance:10,hoursWeek:40,jornada:'completa',
+        days:[1,2,3,4,5,6],start:'08:00',end:'16:00',breakStart:'12:30',breakEnd:'13:30',
         daySchedules:{
-          1:{active:true,start:'08:00',end:'15:00',breakStart:'12:00',breakEnd:'12:30',hours:6.5},
-          2:{active:true,start:'08:00',end:'15:00',breakStart:'12:00',breakEnd:'12:30',hours:6.5},
-          3:{active:true,start:'08:00',end:'15:00',breakStart:'12:00',breakEnd:'12:30',hours:6.5},
-          4:{active:true,start:'08:00',end:'15:00',breakStart:'12:00',breakEnd:'12:30',hours:6.5},
-          5:{active:true,start:'08:00',end:'15:00',breakStart:'12:00',breakEnd:'12:30',hours:6.5},
-          6:{active:true,start:'08:00',end:'12:00',breakStart:'12:00',breakEnd:'12:00',hours:4},
+          1:{active:true,start:'08:00',end:'16:00',breakStart:'12:30',breakEnd:'13:30',hours:7},
+          2:{active:true,start:'08:00',end:'16:00',breakStart:'12:30',breakEnd:'13:30',hours:7},
+          3:{active:true,start:'08:00',end:'16:00',breakStart:'12:30',breakEnd:'13:30',hours:7},
+          4:{active:true,start:'08:00',end:'16:00',breakStart:'12:30',breakEnd:'13:30',hours:7},
+          5:{active:true,start:'08:00',end:'16:00',breakStart:'12:30',breakEnd:'13:30',hours:7},
+          6:{active:true,start:'08:00',end:'12:00',breakStart:'08:00',breakEnd:'08:00',hours:4},
           0:{active:false}
         }
       },
-      {id:'sh2',companyId:'co1',name:'Turno Tarde GYE',type:'fijo',desc:'L-V tarde + Sáb',tolerance:10,hoursWeek:40,
+      {id:'shs2',companyId:'sh1',name:'Turno Tarde GYE',type:'fijo',desc:'Tarde y noche',tolerance:10,hoursWeek:40,jornada:'completa',
         days:[1,2,3,4,5,6],start:'13:00',end:'21:00',breakStart:'17:00',breakEnd:'18:00',
         daySchedules:{
           1:{active:true,start:'13:00',end:'21:00',breakStart:'17:00',breakEnd:'18:00',hours:7},
@@ -1062,23 +1139,22 @@ function loadAll(){
           0:{active:false}
         }
       },
-      {id:'sh3',companyId:'co2',name:'Turno Apertura UIO Rotativo',type:'rotativo',desc:'Todos los días, rotación mensual',tolerance:15,hoursWeek:44,
-        days:[0,1,2,3,4,5,6],start:'07:30',end:'15:30',breakStart:'11:00',breakEnd:'11:30',
+      {id:'shs3',companyId:'sh2',name:'Turno Cumbayá',type:'fijo',desc:'Lunes a viernes jornada completa',tolerance:15,hoursWeek:35,jornada:'completa',
+        days:[1,2,3,4,5],start:'09:00',end:'18:00',breakStart:'13:00',breakEnd:'14:00',
         daySchedules:{
-          1:{active:true,start:'07:30',end:'15:30',breakStart:'11:00',breakEnd:'11:30',hours:7.5},
-          2:{active:true,start:'07:30',end:'15:30',breakStart:'11:00',breakEnd:'11:30',hours:7.5},
-          3:{active:true,start:'07:30',end:'15:30',breakStart:'11:00',breakEnd:'11:30',hours:7.5},
-          4:{active:true,start:'07:30',end:'15:30',breakStart:'11:00',breakEnd:'11:30',hours:7.5},
-          5:{active:true,start:'07:30',end:'14:30',breakStart:'11:00',breakEnd:'11:30',hours:6.5},
-          6:{active:true,start:'08:00',end:'13:00',breakStart:'08:00',breakEnd:'08:00',hours:5},
-          0:{active:true,start:'08:00',end:'12:00',breakStart:'08:00',breakEnd:'08:00',hours:4}
+          1:{active:true,start:'09:00',end:'18:00',breakStart:'13:00',breakEnd:'14:00',hours:8},
+          2:{active:true,start:'09:00',end:'18:00',breakStart:'13:00',breakEnd:'14:00',hours:8},
+          3:{active:true,start:'09:00',end:'18:00',breakStart:'13:00',breakEnd:'14:00',hours:8},
+          4:{active:true,start:'09:00',end:'18:00',breakStart:'13:00',breakEnd:'14:00',hours:8},
+          5:{active:true,start:'09:00',end:'15:00',breakStart:'09:00',breakEnd:'09:00',hours:6},
+          6:{active:false},0:{active:false}
         }
       }
     ];
     employees=[
-      {id:'em1',companyId:'co1',shiftId:'sh1',name:'María García',role:'Cajera',code:'RT-GYE-001',pin:'1234'},
-      {id:'em2',companyId:'co1',shiftId:'sh2',name:'Carlos López',role:'Supervisor',code:'RT-GYE-002',pin:'5678'},
-      {id:'em3',companyId:'co2',shiftId:'sh3',name:'Ana Vásquez',role:'Vendedora',code:'RT-UIO-001',pin:'1111'}
+      {id:'she1',companyId:'sh1',companyName:'SportHaus Guayaquil',shiftId:'shs1',name:'Demo Empleado GYE',role:'Vendedor',code:'SH-GYE-001',pin:'1234'},
+      {id:'she2',companyId:'sh1',companyName:'SportHaus Guayaquil',shiftId:'shs2',name:'Demo Supervisor GYE',role:'Supervisor',code:'SH-GYE-002',pin:'5678'},
+      {id:'she3',companyId:'sh2',companyName:'SportHaus Quito',shiftId:'shs3',name:'Demo Empleado UIO',role:'Cajero',code:'SH-UIO-001',pin:'1111'}
     ];
     sv(K.companies,companies);sv(K.shifts,shifts);sv(K.employees,employees);sv(K.records,records);
   }
@@ -1290,6 +1366,10 @@ function confirmMarca(){
     }
   }
   records.push(rec);sv(K.records,records);
+  // ── Enviar marcación a Google Sheets en tiempo real ──────────────
+  // Cada marcación confirmada se manda como una fila nueva al Sheet.
+  // El jefe abre el Sheet y ve los datos al instante, sin descargar nada.
+  pushToSheets(rec);
   document.getElementById('mt'+idx).textContent=timeStr;
   updateMarcaButtons();refreshStats();renderTodayTab();checkShiftAlert();
   showToast(MARCA_DEFS[idx].label+' registrado: '+timeStr,'s');
@@ -2222,12 +2302,38 @@ function showToast(msg,type='info'){
   clearTimeout(t._t);t._t=setTimeout(()=>{t.className=''},3600);
 }
 
-// ============ INIT ============
-window.addEventListener('load',()=>{
+// ═══════════════════════════════════════════════════════════════════
+// BLOQUE 3 — INICIO DE LA APP (INIT)
+// Antes: arrancaba directo con loadAll() (síncrono).
+// Ahora: primero descarga datos de JSONBin, los mete en localStorage,
+// y luego arranca normalmente. Así cualquier dispositivo ve siempre
+// los datos que el admin configuró, sin importar desde qué PC se abra.
+//
+// SECUENCIA AL ABRIR:
+//   1. "Sincronizando datos..." 
+//   2. Descarga de JSONBin → guarda en localStorage
+//   3. loadAll() → carga en memoria → app lista
+// ═══════════════════════════════════════════════════════════════════
+window.addEventListener('load', async ()=>{
+  showToast('Sincronizando datos...','info');
+  try{
+    // Descarga los datos actuales de JSONBin (config, empresas, empleados, turnos)
+    const remote = await fetchRemote();
+    let hayDatos = false;
+    Object.entries(remote).forEach(([k,v])=>{
+      // Solo sobreescribe si el valor no es null (evita borrar datos locales con nulos)
+      if(v !== null){ localStorage.setItem(k, JSON.stringify(v)); hayDatos=true; }
+    });
+    if(hayDatos) showToast('Datos sincronizados ✓','s');
+    else showToast('Primera vez — configura desde el panel admin','info');
+  }catch(e){
+    // Sin internet: la app sigue con los datos que tenga en localStorage
+    showToast('Sin conexión — usando datos locales','warn');
+  }
+  // Estas líneas son iguales al original — arrancan la app normalmente
   loadAll();
   detectIP();
   populateLoginCompanies();
-  // Set today in report
   const now=new Date();
   const rf=document.getElementById('repFrom'),rt=document.getElementById('repTo');
   if(rf)rf.value=now.getFullYear()+'-'+pad(now.getMonth()+1)+'-01';
@@ -2236,3 +2342,4 @@ window.addEventListener('load',()=>{
 </script>
 </body>
 </html>
+
