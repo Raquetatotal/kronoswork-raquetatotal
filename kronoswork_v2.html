@@ -140,7 +140,33 @@ body{
 }
 .btn-no:hover{background:rgba(255,255,255,0.09);color:var(--text-bright)}
 
-/* ===================== MAIN APP ===================== */
+/* ===================== LATE REASON MODAL ===================== */
+.late-card{
+  background:var(--panel);border:1px solid rgba(255,184,0,.5);
+  border-radius:14px;padding:36px;width:400px;text-align:center;
+  box-shadow:var(--shadow),0 0 60px rgba(255,184,0,.1);
+}
+.late-card .confirm-ico{font-size:3rem;margin-bottom:8px}
+.late-card .confirm-t{color:var(--warn);font-family:'Rajdhani',sans-serif;font-size:1.5rem;font-weight:700;margin-bottom:4px}
+.late-badge{
+  display:inline-block;background:rgba(255,184,0,.12);border:1px solid rgba(255,184,0,.35);
+  border-radius:8px;padding:8px 22px;margin:12px 0;
+  font-family:'Share Tech Mono',monospace;font-size:1.6rem;color:var(--warn);
+}
+.late-sub{font-size:.8rem;color:var(--text-dim);margin-bottom:18px;line-height:1.5}
+.late-reason-wrap{text-align:left;margin-bottom:18px}
+.late-reason-wrap label{display:block;font-size:.65rem;font-weight:600;letter-spacing:2.5px;color:var(--warn);text-transform:uppercase;margin-bottom:6px}
+.late-reason-wrap textarea{
+  width:100%;background:rgba(255,184,0,.05);border:1px solid rgba(255,184,0,.3);
+  border-radius:8px;color:var(--text-bright);padding:10px 14px;
+  font-family:'Exo 2',sans-serif;font-size:.88rem;outline:none;resize:vertical;min-height:80px;
+  transition:border-color .2s,box-shadow .2s;
+}
+.late-reason-wrap textarea:focus{border-color:var(--warn);box-shadow:0 0 0 2px rgba(255,184,0,.15)}
+.late-reason-wrap textarea::placeholder{color:var(--text-dim)}
+.late-reason-optional{font-size:.65rem;color:var(--text-dim);margin-top:5px;font-style:italic}
+
+
 #app{display:none;padding:20px 28px 50px;max-width:1280px;margin:0 auto}
 
 /* ===================== COMPANY BADGE ===================== */
@@ -519,6 +545,25 @@ tbody td{padding:9px 12px;font-size:.8rem;color:var(--text)}
     <div class="confirm-btns">
       <button class="btn-yes" id="btnYes">CONFIRMAR</button>
       <button class="btn-no" onclick="closeConfirm()">CANCELAR</button>
+    </div>
+  </div>
+</div>
+
+<!-- LATE REASON OVERLAY -->
+<div class="overlay" id="lateReasonOverlay">
+  <div class="late-card">
+    <div class="confirm-ico" id="lateReasonIco">⚠️</div>
+    <div class="confirm-t" style="color:var(--warn);font-family:'Rajdhani',sans-serif;font-size:1.5rem;font-weight:700;margin-bottom:4px" id="lateReasonTitle">DEMORA DETECTADA</div>
+    <div class="late-badge" id="lateMinDisplay">+0 min</div>
+    <div class="late-sub" id="lateSubText"></div>
+    <div class="late-reason-wrap">
+      <label>Motivo del atraso</label>
+      <textarea id="lateReasonText" placeholder="Ej: Tráfico, problema de transporte, cita médica..."></textarea>
+      <div class="late-reason-optional">* Obligatorio para continuar</div>
+    </div>
+    <div class="confirm-btns">
+      <button class="btn-yes" style="background:linear-gradient(135deg,#7a5000,#b87800)" onclick="confirmLateReason()" id="lateReasonBtn">REGISTRAR</button>
+      <button class="btn-no" onclick="closeLateReason()">CANCELAR</button>
     </div>
   </div>
 </div>
@@ -1050,12 +1095,25 @@ async function pushRemote(){
 // El Sheet se actualiza instantáneamente — el jefe lo ve sin descargar nada.
 async function pushToSheets(rec){
   try{
+    // Construir payload enriquecido con campos de tardanza
+    const payload={
+      empresa:          rec.companyName||'',
+      empleado:         rec.userName||'',
+      codigo:           rec.userCode||'',
+      turno:            rec.shiftName||'',
+      fecha:            rec.date||'',
+      hora:             rec.time||'',
+      tipo:             rec.typeLabel||'',
+      estado:           rec.late ? 'Tardío' : rec.early ? 'Temprano' : 'OK',
+      // Minutos de demora respecto al horario esperado (aplica a entrada, descanso, regreso y salida)
+      minutos_tardanza: rec.late ? (rec.lateMin||0) : 0,
+      motivo_tardanza:  rec.late ? (rec.lateReason||'') : '',
+    };
     await fetch(SHEETS_URL,{
       method:'POST',
-      // mode no-cors necesario para llamadas desde GitHub Pages a Apps Script
       mode:'no-cors',
       headers:{'Content-Type':'application/json'},
-      body:JSON.stringify(rec)
+      body:JSON.stringify(payload)
     });
   }catch(e){ console.warn('Sheets push error:',e); }
 }
@@ -1318,16 +1376,26 @@ function updateMarcaButtons(){
     const card=document.getElementById('mc'+i);
     const t=document.getElementById('mt'+i);
     const rec=today.find(r=>r.typeIdx===i);
+    // BUG FIX: limpiar todas las clases antes de reasignar para evitar estados mixtos
     card.className='mcard mc-'+i;
-    if(rec){card.classList.add('done','disabled');t.textContent=rec.time}
-    else if(i===0||done.includes(i-1)){card.classList.add('active');t.textContent='Pendiente'}
-    else{card.classList.add('disabled');t.textContent='Pendiente'}
+    if(rec){
+      card.classList.add('done','disabled');
+      t.textContent=rec.time;
+    }else if(i===0||done.includes(i-1)){
+      // Esta tarjeta es la siguiente disponible — SOLO active, nunca disabled
+      card.classList.add('active');
+      t.textContent='Pendiente';
+    }else{
+      card.classList.add('disabled');
+      t.textContent='Pendiente';
+    }
   }
 }
 function requestMarca(idx){
   const card=document.getElementById('mc'+idx);
-  if(card.classList.contains('disabled')&&!card.classList.contains('active'))return;
+  // BUG FIX: solo bloquear si está 'done' (ya registrado) o 'disabled' sin 'active'
   if(card.classList.contains('done'))return;
+  if(card.classList.contains('disabled')&&!card.classList.contains('active'))return;
   const n=new Date();
   const timeStr=pad(n.getHours())+':'+pad(n.getMinutes());
   const def=MARCA_DEFS[idx];
@@ -1342,33 +1410,94 @@ function requestMarca(idx){
   document.getElementById('confirmOverlay').classList.add('active');
 }
 function closeConfirm(){document.getElementById('confirmOverlay').classList.remove('active');pendingMarca=null}
+// Devuelve el horario esperado para cada tipo de marcación según el turno del día.
+// idx: 0=entrada, 1=salida descanso, 2=regreso descanso, 3=salida diaria
+function getExpectedTime(todayDay, idx){
+  if(!todayDay) return null;
+  const map = { 0:todayDay.start, 1:todayDay.breakStart, 2:todayDay.breakEnd, 3:todayDay.end };
+  return map[idx] || null;
+}
+// Etiquetas del modal de tardanza por tipo
+const MARCA_LATE_LABELS = [
+  'la hora de entrada',
+  'la salida a descanso',
+  'el regreso del descanso',
+  'la salida diaria'
+];
+
 function confirmMarca(){
   if(!pendingMarca)return;
   const{idx,timeStr,ts}=pendingMarca;
   closeConfirm();
+
   const co=companies.find(c=>c.id===currentUser.companyId);
   const sh=shifts.find(s=>s.id===currentUser.shiftId);
+  let isLate=false,lateMinutes=0,isEarly=false;
+
+  if(sh){
+    const todayDay=getTodayShiftDay(sh);
+    const expected=getExpectedTime(todayDay,idx);
+    if(expected){
+      const shM=timeToMins(expected),recM=timeToMins(timeStr),diff=recM-shM;
+      const tol=sh.tolerance||10;
+      if(diff>tol){isLate=true;lateMinutes=diff;}
+      else if(diff<-tol){isEarly=true;}
+    }
+  }
+
+  if(isLate){
+    const todayDay2=sh?getTodayShiftDay(sh):null;
+    const expected=todayDay2?getExpectedTime(todayDay2,idx):null;
+    const def=MARCA_DEFS[idx];
+    pendingMarca={idx,timeStr,ts,lateMin:lateMinutes,late:true,early:false,co,sh};
+    // Personalizar modal según el tipo de marcación
+    document.getElementById('lateReasonIco').textContent=def.ico;
+    document.getElementById('lateReasonTitle').textContent='DEMORA EN '+def.label.toUpperCase();
+    document.getElementById('lateReasonBtn').textContent='REGISTRAR '+def.label.toUpperCase().split(' ')[0];
+    document.getElementById('lateMinDisplay').textContent='+'+lateMinutes+' min';
+    document.getElementById('lateSubText').innerHTML=
+      'Te demoraste <strong style="color:var(--warn)">'+lateMinutes+' minutos</strong> respecto a '+
+      '<strong>'+(MARCA_LATE_LABELS[idx]||'el horario')+'</strong>'+
+      (expected?' — horario: <strong>'+expected+'</strong>':'')+
+      '.<br>Por favor indica el motivo.';
+    document.getElementById('lateReasonText').value='';
+    document.getElementById('lateReasonOverlay').classList.add('active');
+    return;
+  }
+
+  _saveMarcaRecord({idx,timeStr,ts,late:false,lateMin:0,early:isEarly,lateReason:'',co,sh});
+}
+
+function closeLateReason(){
+  document.getElementById('lateReasonOverlay').classList.remove('active');
+  pendingMarca=null;
+}
+
+function confirmLateReason(){
+  const reason=document.getElementById('lateReasonText').value.trim();
+  if(!reason){
+    showToast('Por favor escribe el motivo del atraso','e');
+    document.getElementById('lateReasonText').focus();
+    return;
+  }
+  document.getElementById('lateReasonOverlay').classList.remove('active');
+  if(!pendingMarca)return;
+  const{idx,timeStr,ts,lateMin,co,sh}=pendingMarca;
+  _saveMarcaRecord({idx,timeStr,ts,late:true,lateMin,early:false,lateReason:reason,co,sh});
+  pendingMarca=null;
+}
+
+function _saveMarcaRecord({idx,timeStr,ts,late,lateMin,early,lateReason,co,sh}){
   const rec={
     id:'r'+Date.now(),userId:currentUser.id,userName:currentUser.name,userCode:currentUser.code,
     companyId:currentUser.companyId,companyName:co?co.name:'—',
     shiftId:currentUser.shiftId,shiftName:sh?sh.name:'—',
     date:todayKey(),time:timeStr,timestamp:ts,
     typeIdx:idx,typeKey:MARCA_DEFS[idx].key,typeLabel:MARCA_DEFS[idx].label,
-    late:false,lateMin:0,early:false
+    late,lateMin:lateMin||0,early,lateReason:lateReason||''
   };
-  // Check tardanza — use today's specific day schedule
-  if(sh&&idx===0){
-    const todayDay=getTodayShiftDay(sh);
-    if(todayDay){
-      const shM=timeToMins(todayDay.start),recM=timeToMins(timeStr),diff=recM-shM;
-      if(diff>(sh.tolerance||10)){rec.late=true;rec.lateMin=diff}
-      else if(diff<-(sh.tolerance||10)){rec.early=true}
-    }
-  }
   records.push(rec);sv(K.records,records);
   // ── Enviar marcación a Google Sheets en tiempo real ──────────────
-  // Cada marcación confirmada se manda como una fila nueva al Sheet.
-  // El jefe abre el Sheet y ve los datos al instante, sin descargar nada.
   pushToSheets(rec);
   document.getElementById('mt'+idx).textContent=timeStr;
   updateMarcaButtons();refreshStats();renderTodayTab();checkShiftAlert();
@@ -1400,18 +1529,28 @@ function checkShiftAlert(){
   const entrada=today.find(r=>r.typeIdx===0);
   if(!entrada){
     el.className='alert-bar info';
-    el.innerHTML=`👋 Turno: <strong>${sh.name}</strong> · Entrada: <strong>${todayDay.start}</strong> · Salida: <strong>${todayDay.end}</strong> · Jornada: <strong>${fmtH(todayDay.hours||0)}</strong> · Tolerancia: ${sh.tolerance}min`;
+    el.innerHTML='👋 Turno: <strong>'+sh.name+'</strong> · Entrada: <strong>'+todayDay.start+'</strong> · Salida: <strong>'+todayDay.end+'</strong> · Jornada: <strong>'+fmtH(todayDay.hours||0)+'</strong> · Tolerancia: '+sh.tolerance+'min';
     sv_.textContent='Esperando';sv_.className='stat-v';ss.textContent='No ha marcado';return;
   }
-  if(entrada.late){
-    el.className='alert-bar warn';
-    el.innerHTML=`⚠️ Entrada tardía: llegaste <strong>${entrada.lateMin} minutos</strong> después del horario (${todayDay.start}). Tolerancia: ${sh.tolerance}min.`;
-    sv_.textContent='+'+entrada.lateMin+'min';sv_.className='stat-v warn';ss.textContent='Tardanza';
+  // Revisar demoras en TODAS las marcaciones del día, no solo entrada
+  const lateRecs=today.filter(r=>r.late);
+  if(lateRecs.length){
+    const lastLate=lateRecs[lateRecs.length-1];
+    const def=MARCA_DEFS[lastLate.typeIdx];
+    const expected=getExpectedTime(todayDay,lastLate.typeIdx);
+    let msg='⚠️ '+def.ico+' <strong>'+def.label+'</strong> con demora de <strong>'+lastLate.lateMin+' min</strong>';
+    if(expected) msg+=' (esperado: '+expected+')';
+    if(lastLate.lateReason) msg+=' · Motivo: <em>'+lastLate.lateReason+'</em>';
+    if(lateRecs.length>1) msg+=' · Total demoras hoy: <strong>'+lateRecs.length+'</strong>';
+    el.className='alert-bar warn';el.innerHTML=msg;
+    const totalLateMin=lateRecs.reduce((a,r)=>a+(r.lateMin||0),0);
+    sv_.textContent='+'+totalLateMin+'min';sv_.className='stat-v warn';
+    ss.textContent=lateRecs.length+' demora'+(lateRecs.length>1?'s':'');
   }else if(entrada.early){
-    el.className='alert-bar ok';el.innerHTML=`✅ Llegaste antes del inicio de turno. ¡Excelente!`;
+    el.className='alert-bar ok';el.innerHTML='✅ Llegaste antes del inicio de turno. ¡Excelente!';
     sv_.textContent='Temprano';sv_.className='stat-v ok';ss.textContent='Antes del turno';
   }else{
-    el.className='alert-bar ok';el.innerHTML=`✅ Entrada dentro del horario (${todayDay.start}). ¡Puntual!`;
+    el.className='alert-bar ok';el.innerHTML='✅ Todo en horario. Turno: '+sh.name+' ('+todayDay.start+'–'+todayDay.end+')';
     sv_.textContent='Puntual';sv_.className='stat-v ok';ss.textContent='En horario';
   }
 }
@@ -1508,11 +1647,17 @@ function renderPeriodTab(elId,uid,s,e){
     const dr=bd[dk];const h=calcHours(dr);tot+=h;
     const e0=dr.find(r=>r.typeIdx===0),e1=dr.find(r=>r.typeIdx===1),e2=dr.find(r=>r.typeIdx===2),e3=dr.find(r=>r.typeIdx===3);
     const d=new Date(dk+'T12:00:00');
+    const estadoBadge=e0&&e0.late
+      ?`<span class="badge bg-late">+${e0.lateMin}min</span>`
+      :e0&&e0.early?'<span class="badge bg-early">TEMP.</span>'
+      :'<span class="badge bg-ok">OK</span>';
+    const motivoCell=e0&&e0.late&&e0.lateReason
+      ?`<br><span style="font-size:.66rem;color:var(--warn)" title="${e0.lateReason}">⚠ ${e0.lateReason.length>30?e0.lateReason.slice(0,30)+'…':e0.lateReason}</span>`:'';
     html+=`<tr><td>${DAYS_ES[d.getDay()]} ${d.getDate()}/${d.getMonth()+1}</td>
     <td class="mono">${e0?e0.time:'—'}</td><td class="mono">${e1?e1.time:'—'}</td>
     <td class="mono">${e2?e2.time:'—'}</td><td class="mono">${e3?e3.time:'—'}</td>
     <td class="mono" style="color:var(--accent2)">${fmtH(h)}</td>
-    <td>${e0&&e0.late?`<span class="badge bg-late">+${e0.lateMin}min</span>`:e0&&e0.early?'<span class="badge bg-early">TEMP.</span>':'<span class="badge bg-ok">OK</span>'}</td></tr>`;
+    <td>${estadoBadge}${motivoCell}</td></tr>`;
   });
   html+=`</tbody></table><div style="margin-top:14px;padding:11px 16px;background:rgba(0,200,255,.06);border:1px solid rgba(0,200,255,.2);border-radius:8px;display:flex;justify-content:space-between">
     <span style="font-size:.78rem;color:var(--text-dim)">TOTAL PERÍODO</span>
@@ -1523,12 +1668,14 @@ function renderHistTab(){
   const el=document.getElementById('tHist');
   const recs=records.filter(r=>r.userId===currentUser.id).sort((a,b)=>b.timestamp-a.timestamp).slice(0,200);
   if(!recs.length){el.innerHTML='<div class="empty"><div class="empty-i">📂</div>Sin historial.</div>';return}
-  let html=`<table><thead><tr><th>Fecha</th><th>Hora</th><th>Tipo</th><th>Estado</th></tr></thead><tbody>`;
+  let html=`<table><thead><tr><th>Fecha</th><th>Hora</th><th>Tipo</th><th>Estado</th><th>Motivo Atraso</th></tr></thead><tbody>`;
   recs.forEach(r=>{
     const td={'entrada':'bg-e','desc-sal':'bg-ds','desc-reg':'bg-dr','salida':'bg-s'};
+    const estadoBadge=r.late?`<span class="badge bg-late">+${r.lateMin}min</span>`:r.early?'<span class="badge bg-early">TEMP.</span>':'<span class="badge bg-ok">OK</span>';
+    const motivo=r.late&&r.lateReason?`<span style="font-size:.72rem;color:var(--warn)">${r.lateReason}</span>`:'<span style="color:var(--text-dim)">—</span>';
     html+=`<tr><td class="mono">${r.date}</td><td class="mono">${r.time}</td>
     <td><span class="badge ${td[r.typeKey]||''}">${r.typeLabel}</span></td>
-    <td>${r.late?`<span class="badge bg-late">+${r.lateMin}min</span>`:'<span class="badge bg-ok">OK</span>'}</td></tr>`;
+    <td>${estadoBadge}</td><td>${motivo}</td></tr>`;
   });
   html+=`</tbody></table>`;el.innerHTML=html;
 }
@@ -2181,12 +2328,16 @@ function generateReport(){
   if(!from||!to){showToast('Seleccione rango de fechas','e');return}
   let emps=emF?employees.filter(e=>e.id===emF):coF?employees.filter(e=>e.companyId===coF):employees;
   const el=document.getElementById('repTable');
-  let html=`<table><thead><tr><th>Empresa</th><th>Empleado</th><th>Código</th><th>Días</th><th>Total Horas</th><th>Tardanzas</th><th>Prom/Día</th></tr></thead><tbody>`;
+  let html=`<table><thead><tr><th>Empresa</th><th>Empleado</th><th>Código</th><th>Días</th><th>Total Horas</th><th>Tardanzas</th><th>Min. Tarde Total</th><th>Prom/Día</th></tr></thead><tbody>`;
   emps.forEach(emp=>{
     const recs=records.filter(r=>r.userId===emp.id&&r.date>=from&&r.date<=to);
     const bd={};recs.forEach(r=>{if(!bd[r.date])bd[r.date]=[];bd[r.date].push(r)});
-    let tot=0,lates=0;
-    Object.values(bd).forEach(dr=>{tot+=calcHours(dr);if(dr.find(r=>r.late))lates++});
+    let tot=0,lates=0,totalLateMin=0;
+    Object.values(bd).forEach(dr=>{
+      tot+=calcHours(dr);
+      const lateRec=dr.find(r=>r.late);
+      if(lateRec){lates++;totalLateMin+=(lateRec.lateMin||0);}
+    });
     const days=Object.keys(bd).length,avg=days?tot/days:0;
     const co=companies.find(c=>c.id===emp.companyId);
     html+=`<tr>
@@ -2194,6 +2345,7 @@ function generateReport(){
       <td>${emp.name}</td><td class="mono">${emp.code}</td><td class="mono">${days}</td>
       <td class="mono" style="color:var(--accent2)">${fmtH(tot)}</td>
       <td class="mono" style="color:${lates?'var(--danger)':'var(--accent2)'}">${lates}</td>
+      <td class="mono" style="color:${totalLateMin>0?'var(--danger)':'var(--accent2)'}">${totalLateMin>0?'+'+totalLateMin+' min':'—'}</td>
       <td class="mono">${fmtH(avg)}</td></tr>`;
   });
   html+=`</tbody></table>`;el.innerHTML=html;
@@ -2262,8 +2414,13 @@ function doImportBackup(ev){
 
 // ============ CSV EXPORT ============
 function toCSV(recs){
-  const hdr='Empresa,Empleado,Código,Turno,Fecha,Hora,Tipo,Estado\n';
-  const rows=recs.map(r=>`"${r.companyName||''}","${r.userName}","${r.userCode}","${r.shiftName||''}","${r.date}","${r.time}","${r.typeLabel}","${r.late?'Tardío (+'+r.lateMin+'min)':'OK'}"`).join('\n');
+  const hdr='Empresa,Empleado,Código,Turno,Fecha,Hora,Tipo,Estado,Minutos Tardanza,Motivo Tardanza\n';
+  const rows=recs.map(r=>{
+    const estado=r.late?'Tardío (+'+r.lateMin+'min)':r.early?'Temprano':'OK';
+    const minTard=r.late?(r.lateMin||0):0;
+    const motivo=r.late?(r.lateReason||''):'';
+    return `"${r.companyName||''}","${r.userName}","${r.userCode}","${r.shiftName||''}","${r.date}","${r.time}","${r.typeLabel}","${estado}","${minTard}","${motivo}"`;
+  }).join('\n');
   return hdr+rows;
 }
 function dlCSV(content,name){
@@ -2342,4 +2499,3 @@ window.addEventListener('load', async ()=>{
 </script>
 </body>
 </html>
-
