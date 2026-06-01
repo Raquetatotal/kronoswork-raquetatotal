@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Raquetatotal — Sistema de Marcación </title>
+<title>SportHaus — Sistema de Marcación</title>
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&family=Exo+2:wght@300;400;600;800&display=swap" rel="stylesheet">
 <style>
 /* ===================== VARIABLES ===================== */
@@ -124,7 +124,28 @@ body{
 }
 .confirm-ico{font-size:2.8rem;margin-bottom:12px}
 .confirm-t{font-family:'Rajdhani',sans-serif;font-size:1.4rem;font-weight:700;color:var(--text-bright);margin-bottom:8px}
-.confirm-d{font-size:0.85rem;color:var(--text-dim);line-height:1.6;margin-bottom:24px}
+.confirm-d{font-size:0.85rem;color:var(--text-dim);line-height:1.6;margin-bottom:16px}
+.confirm-comment-wrap{text-align:left;margin-bottom:20px}
+.confirm-comment-wrap label{display:block;font-size:.62rem;font-weight:600;letter-spacing:2.5px;color:var(--text-dim);text-transform:uppercase;margin-bottom:6px;transition:color .2s}
+.confirm-comment-wrap.is-late label{color:var(--warn)}
+.confirm-comment-wrap textarea{
+  width:100%;background:rgba(255,255,255,.04);border:1px solid var(--border);
+  border-radius:8px;color:var(--text-bright);padding:9px 13px;
+  font-family:'Exo 2',sans-serif;font-size:.84rem;outline:none;resize:vertical;min-height:68px;
+  transition:border-color .2s,box-shadow .2s;box-sizing:border-box;
+}
+.confirm-comment-wrap textarea:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(0,200,255,.1)}
+.confirm-comment-wrap.is-late textarea{border-color:rgba(255,184,0,.4)}
+.confirm-comment-wrap.is-late textarea:focus{border-color:var(--warn);box-shadow:0 0 0 2px rgba(255,184,0,.15)}
+.confirm-comment-wrap textarea::placeholder{color:var(--text-dim)}
+.confirm-comment-hint{font-size:.62rem;color:var(--text-dim);margin-top:5px;font-style:italic}
+.confirm-comment-hint.required{color:var(--warn)}
+.confirm-late-badge{
+  display:none;background:rgba(255,184,0,.1);border:1px solid rgba(255,184,0,.35);
+  border-radius:7px;padding:6px 14px;margin-bottom:12px;
+  font-family:'Share Tech Mono',monospace;font-size:1.3rem;color:var(--warn);text-align:center;
+}
+.confirm-late-badge.visible{display:block}
 .confirm-time{font-family:'Share Tech Mono',monospace;font-size:2rem;color:var(--accent);display:block;margin:8px 0}
 .confirm-btns{display:flex;gap:12px;justify-content:center}
 .btn-yes{
@@ -536,34 +557,23 @@ tbody td{padding:9px 12px;font-size:.8rem;color:var(--text)}
   </div>
 </div>
 
-<!-- CONFIRM OVERLAY -->
+<!-- CONFIRM OVERLAY (incluye campo de comentario para todas las marcaciones) -->
 <div class="overlay" id="confirmOverlay">
   <div class="confirm-card">
     <div class="confirm-ico" id="confirmIco">⏰</div>
     <div class="confirm-t" id="confirmT">Confirmar</div>
     <div class="confirm-d" id="confirmD"></div>
+    <!-- Badge de tardanza: solo visible cuando hay demora -->
+    <div class="confirm-late-badge" id="confirmLateBadge">+0 min tarde</div>
+    <!-- Comentario: siempre visible, obligatorio solo si hay tardanza -->
+    <div class="confirm-comment-wrap" id="confirmCommentWrap">
+      <label id="confirmCommentLabel">Comentario (opcional)</label>
+      <textarea id="confirmCommentText" rows="2" placeholder="Agrega una nota sobre esta marcación..."></textarea>
+      <div class="confirm-comment-hint" id="confirmCommentHint">Puedes dejar una observación para el registro.</div>
+    </div>
     <div class="confirm-btns">
-      <button class="btn-yes" id="btnYes">CONFIRMAR</button>
+      <button class="btn-yes" id="btnYes" onclick="confirmMarca()">CONFIRMAR</button>
       <button class="btn-no" onclick="closeConfirm()">CANCELAR</button>
-    </div>
-  </div>
-</div>
-
-<!-- LATE REASON OVERLAY -->
-<div class="overlay" id="lateReasonOverlay">
-  <div class="late-card">
-    <div class="confirm-ico" id="lateReasonIco">⚠️</div>
-    <div class="confirm-t" style="color:var(--warn);font-family:'Rajdhani',sans-serif;font-size:1.5rem;font-weight:700;margin-bottom:4px" id="lateReasonTitle">DEMORA DETECTADA</div>
-    <div class="late-badge" id="lateMinDisplay">+0 min</div>
-    <div class="late-sub" id="lateSubText"></div>
-    <div class="late-reason-wrap">
-      <label>Motivo del atraso</label>
-      <textarea id="lateReasonText" placeholder="Ej: Tráfico, problema de transporte, cita médica..."></textarea>
-      <div class="late-reason-optional">* Obligatorio para continuar</div>
-    </div>
-    <div class="confirm-btns">
-      <button class="btn-yes" style="background:linear-gradient(135deg,#7a5000,#b87800)" onclick="confirmLateReason()" id="lateReasonBtn">REGISTRAR</button>
-      <button class="btn-no" onclick="closeLateReason()">CANCELAR</button>
     </div>
   </div>
 </div>
@@ -1105,9 +1115,10 @@ async function pushToSheets(rec){
       hora:             rec.time||'',
       tipo:             rec.typeLabel||'',
       estado:           rec.late ? 'Tardío' : rec.early ? 'Temprano' : 'OK',
-      // Minutos de demora respecto al horario esperado (aplica a entrada, descanso, regreso y salida)
+      // Minutos de demora respecto al horario esperado (aplica a todos los tipos de marcación)
       minutos_tardanza: rec.late ? (rec.lateMin||0) : 0,
-      motivo_tardanza:  rec.late ? (rec.lateReason||'') : '',
+      // Comentario siempre presente — obligatorio si hay tardanza, opcional en el resto
+      motivo_tardanza:  rec.lateReason||'',
     };
     await fetch(SHEETS_URL,{
       method:'POST',
@@ -1391,53 +1402,32 @@ function updateMarcaButtons(){
     }
   }
 }
+// Devuelve el horario esperado para cada tipo de marcación según el turno del día.
+function getExpectedTime(todayDay, idx){
+  if(!todayDay) return null;
+  const map={0:todayDay.start,1:todayDay.breakStart,2:todayDay.breakEnd,3:todayDay.end};
+  return map[idx]||null;
+}
+const MARCA_LATE_LABELS=['la hora de entrada','la salida a descanso','el regreso del descanso','la salida diaria'];
+
 function requestMarca(idx){
   const card=document.getElementById('mc'+idx);
   // BUG FIX: solo bloquear si está 'done' (ya registrado) o 'disabled' sin 'active'
   if(card.classList.contains('done'))return;
   if(card.classList.contains('disabled')&&!card.classList.contains('active'))return;
+
   const n=new Date();
   const timeStr=pad(n.getHours())+':'+pad(n.getMinutes());
   const def=MARCA_DEFS[idx];
-  document.getElementById('confirmIco').textContent=def.ico;
-  document.getElementById('confirmT').textContent=def.label;
-  document.getElementById('confirmD').innerHTML=
-    `<strong style="color:var(--text-bright)">${currentUser.name}</strong><br>
-     <span class="confirm-time">${timeStr}</span>
-     Fecha: ${todayKey()}`;
-  pendingMarca={idx,timeStr,ts:n.getTime()};
-  document.getElementById('btnYes').onclick=confirmMarca;
-  document.getElementById('confirmOverlay').classList.add('active');
-}
-function closeConfirm(){document.getElementById('confirmOverlay').classList.remove('active');pendingMarca=null}
-// Devuelve el horario esperado para cada tipo de marcación según el turno del día.
-// idx: 0=entrada, 1=salida descanso, 2=regreso descanso, 3=salida diaria
-function getExpectedTime(todayDay, idx){
-  if(!todayDay) return null;
-  const map = { 0:todayDay.start, 1:todayDay.breakStart, 2:todayDay.breakEnd, 3:todayDay.end };
-  return map[idx] || null;
-}
-// Etiquetas del modal de tardanza por tipo
-const MARCA_LATE_LABELS = [
-  'la hora de entrada',
-  'la salida a descanso',
-  'el regreso del descanso',
-  'la salida diaria'
-];
 
-function confirmMarca(){
-  if(!pendingMarca)return;
-  const{idx,timeStr,ts}=pendingMarca;
-  closeConfirm();
-
-  const co=companies.find(c=>c.id===currentUser.companyId);
+  // Calcular si hay tardanza para mostrar el badge desde el principio
   const sh=shifts.find(s=>s.id===currentUser.shiftId);
-  let isLate=false,lateMinutes=0,isEarly=false;
-
+  let isLate=false,lateMinutes=0,isEarly=false,expectedTime='';
   if(sh){
     const todayDay=getTodayShiftDay(sh);
     const expected=getExpectedTime(todayDay,idx);
     if(expected){
+      expectedTime=expected;
       const shM=timeToMins(expected),recM=timeToMins(timeStr),diff=recM-shM;
       const tol=sh.tolerance||10;
       if(diff>tol){isLate=true;lateMinutes=diff;}
@@ -1445,46 +1435,67 @@ function confirmMarca(){
     }
   }
 
+  // Poblar modal
+  document.getElementById('confirmIco').textContent=def.ico;
+  document.getElementById('confirmT').textContent=def.label;
+  document.getElementById('confirmD').innerHTML=
+    '<strong style="color:var(--text-bright)">'+currentUser.name+'</strong><br>'+
+    '<span class="confirm-time">'+timeStr+'</span>'+
+    'Fecha: '+todayKey()+
+    (expectedTime?' &nbsp;·&nbsp; Horario: <strong>'+expectedTime+'</strong>':'');
+
+  // Badge de tardanza — solo si llega tarde
+  const badge=document.getElementById('confirmLateBadge');
   if(isLate){
-    const todayDay2=sh?getTodayShiftDay(sh):null;
-    const expected=todayDay2?getExpectedTime(todayDay2,idx):null;
-    const def=MARCA_DEFS[idx];
-    pendingMarca={idx,timeStr,ts,lateMin:lateMinutes,late:true,early:false,co,sh};
-    // Personalizar modal según el tipo de marcación
-    document.getElementById('lateReasonIco').textContent=def.ico;
-    document.getElementById('lateReasonTitle').textContent='DEMORA EN '+def.label.toUpperCase();
-    document.getElementById('lateReasonBtn').textContent='REGISTRAR '+def.label.toUpperCase().split(' ')[0];
-    document.getElementById('lateMinDisplay').textContent='+'+lateMinutes+' min';
-    document.getElementById('lateSubText').innerHTML=
-      'Te demoraste <strong style="color:var(--warn)">'+lateMinutes+' minutos</strong> respecto a '+
-      '<strong>'+(MARCA_LATE_LABELS[idx]||'el horario')+'</strong>'+
-      (expected?' — horario: <strong>'+expected+'</strong>':'')+
-      '.<br>Por favor indica el motivo.';
-    document.getElementById('lateReasonText').value='';
-    document.getElementById('lateReasonOverlay').classList.add('active');
-    return;
+    badge.textContent='+'+lateMinutes+' min tarde · '+MARCA_LATE_LABELS[idx];
+    badge.classList.add('visible');
+  } else {
+    badge.classList.remove('visible');
   }
 
-  _saveMarcaRecord({idx,timeStr,ts,late:false,lateMin:0,early:isEarly,lateReason:'',co,sh});
+  // Campo de comentario — siempre visible, label y hint cambian según estado
+  const wrap=document.getElementById('confirmCommentWrap');
+  const lbl=document.getElementById('confirmCommentLabel');
+  const hint=document.getElementById('confirmCommentHint');
+  document.getElementById('confirmCommentText').value='';
+  if(isLate){
+    wrap.classList.add('is-late');
+    lbl.textContent='Motivo del atraso *';
+    hint.textContent='Obligatorio: explica el motivo de la demora.';
+    hint.classList.add('required');
+  } else {
+    wrap.classList.remove('is-late');
+    lbl.textContent='Comentario (opcional)';
+    hint.textContent='Puedes dejar una observación para el registro.';
+    hint.classList.remove('required');
+  }
+
+  // Guardar estado de tardanza en pendingMarca para usarlo al confirmar
+  pendingMarca={idx,timeStr,ts:n.getTime(),isLate,lateMinutes,isEarly};
+  document.getElementById('confirmOverlay').classList.add('active');
 }
 
-function closeLateReason(){
-  document.getElementById('lateReasonOverlay').classList.remove('active');
+function closeConfirm(){
+  document.getElementById('confirmOverlay').classList.remove('active');
   pendingMarca=null;
 }
 
-function confirmLateReason(){
-  const reason=document.getElementById('lateReasonText').value.trim();
-  if(!reason){
-    showToast('Por favor escribe el motivo del atraso','e');
-    document.getElementById('lateReasonText').focus();
-    return;
-  }
-  document.getElementById('lateReasonOverlay').classList.remove('active');
+function confirmMarca(){
   if(!pendingMarca)return;
-  const{idx,timeStr,ts,lateMin,co,sh}=pendingMarca;
-  _saveMarcaRecord({idx,timeStr,ts,late:true,lateMin,early:false,lateReason:reason,co,sh});
-  pendingMarca=null;
+  const{idx,timeStr,ts,isLate,lateMinutes,isEarly}=pendingMarca;
+  const comment=document.getElementById('confirmCommentText').value.trim();
+
+  // Si hay tardanza, el comentario es obligatorio
+  if(isLate&&!comment){
+    showToast('Por favor escribe el motivo del atraso','e');
+    document.getElementById('confirmCommentText').focus();
+    return;
+  }
+
+  closeConfirm();
+  const co=companies.find(c=>c.id===currentUser.companyId);
+  const sh=shifts.find(s=>s.id===currentUser.shiftId);
+  _saveMarcaRecord({idx,timeStr,ts,late:isLate,lateMin:lateMinutes||0,early:isEarly,lateReason:comment,co,sh});
 }
 
 function _saveMarcaRecord({idx,timeStr,ts,late,lateMin,early,lateReason,co,sh}){
@@ -1651,8 +1662,12 @@ function renderPeriodTab(elId,uid,s,e){
       ?`<span class="badge bg-late">+${e0.lateMin}min</span>`
       :e0&&e0.early?'<span class="badge bg-early">TEMP.</span>'
       :'<span class="badge bg-ok">OK</span>';
-    const motivoCell=e0&&e0.late&&e0.lateReason
-      ?`<br><span style="font-size:.66rem;color:var(--warn)" title="${e0.lateReason}">⚠ ${e0.lateReason.length>30?e0.lateReason.slice(0,30)+'…':e0.lateReason}</span>`:'';
+    const hasComment=e0&&e0.lateReason;
+    const commentColor=e0&&e0.late?'var(--warn)':'var(--text-dim)';
+    const commentIcon=e0&&e0.late?'⚠ ':'💬 ';
+    const motivoCell=hasComment
+      ?('<br><span style="font-size:.66rem;color:'+commentColor+'" title="'+e0.lateReason+'">'+commentIcon+(e0.lateReason.length>30?e0.lateReason.slice(0,30)+'…':e0.lateReason)+'</span>')
+      :'';
     html+=`<tr><td>${DAYS_ES[d.getDay()]} ${d.getDate()}/${d.getMonth()+1}</td>
     <td class="mono">${e0?e0.time:'—'}</td><td class="mono">${e1?e1.time:'—'}</td>
     <td class="mono">${e2?e2.time:'—'}</td><td class="mono">${e3?e3.time:'—'}</td>
@@ -1672,7 +1687,8 @@ function renderHistTab(){
   recs.forEach(r=>{
     const td={'entrada':'bg-e','desc-sal':'bg-ds','desc-reg':'bg-dr','salida':'bg-s'};
     const estadoBadge=r.late?`<span class="badge bg-late">+${r.lateMin}min</span>`:r.early?'<span class="badge bg-early">TEMP.</span>':'<span class="badge bg-ok">OK</span>';
-    const motivo=r.late&&r.lateReason?`<span style="font-size:.72rem;color:var(--warn)">${r.lateReason}</span>`:'<span style="color:var(--text-dim)">—</span>';
+    const motivoColor=r.late?'var(--warn)':'var(--text-dim)';
+    const motivo=r.lateReason?('<span style="font-size:.72rem;color:'+motivoColor+'">'+r.lateReason+'</span>'):'<span style="color:var(--text-dim)">—</span>';
     html+=`<tr><td class="mono">${r.date}</td><td class="mono">${r.time}</td>
     <td><span class="badge ${td[r.typeKey]||''}">${r.typeLabel}</span></td>
     <td>${estadoBadge}</td><td>${motivo}</td></tr>`;
@@ -2418,7 +2434,7 @@ function toCSV(recs){
   const rows=recs.map(r=>{
     const estado=r.late?'Tardío (+'+r.lateMin+'min)':r.early?'Temprano':'OK';
     const minTard=r.late?(r.lateMin||0):0;
-    const motivo=r.late?(r.lateReason||''):'';
+    const motivo=r.lateReason||'';
     return `"${r.companyName||''}","${r.userName}","${r.userCode}","${r.shiftName||''}","${r.date}","${r.time}","${r.typeLabel}","${estado}","${minTard}","${motivo}"`;
   }).join('\n');
   return hdr+rows;
@@ -2499,3 +2515,4 @@ window.addEventListener('load', async ()=>{
 </script>
 </body>
 </html>
+
