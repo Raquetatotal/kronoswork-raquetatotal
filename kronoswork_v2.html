@@ -146,6 +146,18 @@ body{
   font-family:'Share Tech Mono',monospace;font-size:1.3rem;color:var(--warn);text-align:center;
 }
 .confirm-late-badge.visible{display:block}
+/* ===== CORRECCIONES DE REGISTROS ===== */
+.corr-emp-row{display:flex;align-items:center;justify-content:space-between;padding:10px 14px;background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:8px;margin-bottom:8px}
+.corr-emp-info{font-size:.85rem;color:var(--text-bright)}
+.corr-emp-sub{font-size:.7rem;color:var(--text-dim);margin-top:2px}
+.corr-rec-row{display:flex;align-items:center;gap:10px;padding:7px 12px;background:rgba(255,255,255,.02);border:1px solid var(--border);border-radius:7px;margin:4px 0}
+.corr-rec-row .cr-type{font-family:'Rajdhani',sans-serif;font-weight:700;font-size:.82rem;color:var(--text-bright);min-width:140px}
+.corr-rec-row .cr-time{font-family:'Share Tech Mono',monospace;font-size:.78rem;color:var(--accent);min-width:55px}
+.corr-rec-row .cr-late{font-size:.72rem;color:var(--warn);min-width:60px}
+.corr-rec-row .cr-comment{font-size:.72rem;color:var(--text-dim);flex:1;font-style:italic;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.btn-del-rec{background:rgba(255,52,97,.12);border:1px solid rgba(255,52,97,.3);border-radius:6px;color:var(--danger);font-size:.7rem;font-weight:700;letter-spacing:1px;padding:4px 10px;cursor:pointer;white-space:nowrap}
+.btn-del-rec:hover{background:rgba(255,52,97,.25)}
+.corr-empty{font-size:.8rem;color:var(--text-dim);padding:12px;text-align:center}
 .confirm-time{font-family:'Share Tech Mono',monospace;font-size:2rem;color:var(--accent);display:block;margin:8px 0}
 .confirm-btns{display:flex;gap:12px;justify-content:center}
 .btn-yes{
@@ -590,6 +602,7 @@ tbody td{padding:9px 12px;font-size:.8rem;color:var(--text)}
       <button class="atbtn" onclick="switchAt(this,'atTurnos')">Turnos</button>
       <button class="atbtn" onclick="switchAt(this,'atEmpleados')">Empleados</button>
       <button class="atbtn" onclick="switchAt(this,'atReportes')">Reportes</button>
+      <button class="atbtn" onclick="switchAt(this,'atCorrecciones');renderCorrecciones()">✏️ Correcciones</button>
       <button class="atbtn" onclick="switchAt(this,'atAlertas')" id="tabBtnAlertas">🚨 Alertas IP</button>
       <button class="atbtn" onclick="switchAt(this,'atConfig')">Configuración</button>
     </div>
@@ -808,6 +821,27 @@ tbody td{padding:9px 12px;font-size:.8rem;color:var(--text)}
         los datos ocupan ~2KB/día. Puedes almacenar años de historial. 
         Para ampliar capacidad: exporte CSV mensualmente y use "Limpiar datos anteriores a 6 meses".
       </div>
+    </div>
+
+    <!-- TAB: CORRECCIONES -->
+    <div class="atpane" id="atCorrecciones">
+      <div style="margin-bottom:16px">
+        <div style="font-family:'Rajdhani',sans-serif;font-size:.78rem;letter-spacing:3px;color:var(--warn);text-transform:uppercase;margin-bottom:6px">✏️ Corrección de Registros</div>
+        <div style="font-size:.75rem;color:var(--text-dim);line-height:1.6">Elimina marcaciones incorrectas del día para que el empleado pueda volver a registrar. Selecciona fecha y empleado.</div>
+      </div>
+      <div style="display:flex;gap:12px;flex-wrap:wrap;align-items:flex-end;margin-bottom:18px">
+        <div class="fg-inline">
+          <label>Fecha</label>
+          <input type="date" id="corrFecha" style="background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:7px;color:var(--text-bright);padding:8px 12px;font-family:'Exo 2',sans-serif" onchange="renderCorrecciones()">
+        </div>
+        <div class="fg-inline" style="min-width:180px">
+          <label>Empresa</label>
+          <select id="corrEmpresa" style="background:rgba(255,255,255,.04);border:1px solid var(--border);border-radius:7px;color:var(--text-bright);padding:8px 12px;font-family:'Exo 2',sans-serif" onchange="renderCorrecciones()">
+            <option value="">Todas</option>
+          </select>
+        </div>
+      </div>
+      <div id="corrList"></div>
     </div>
 
     <!-- TAB: ALERTAS IP -->
@@ -1737,7 +1771,7 @@ function buildColorPickerFor(containerId, hiddenId, selectedColor){
 function buildColorPicker(){buildColorPickerFor('colorPicker','newEmpresaColor','#00c8ff')}
 function openAdmin(){
   document.getElementById('adminModal').style.display='flex';
-  buildColorPicker();renderAdminEmpresas();populateEmpFilterSel();loadCfgForm();updateStorageInfo();updateAlertTabBadge();
+  buildColorPicker();renderAdminEmpresas();populateEmpFilterSel();loadCfgForm();updateStorageInfo();updateAlertTabBadge();renderCorrecciones();
 }
 function closeAdmin(){document.getElementById('adminModal').style.display='none'}
 function renderAdminEmpresas(){
@@ -2339,6 +2373,82 @@ function initRepTab(){
   document.getElementById('repFrom').value=now.getFullYear()+'-'+pad(now.getMonth()+1)+'-01';
   document.getElementById('repTo').value=dateKey(now);
 }
+// ============ CORRECCIONES DE REGISTROS ============
+function renderCorrecciones(){
+  // Poblar select de empresa
+  const corrEmp=document.getElementById('corrEmpresa');
+  if(corrEmp){
+    const curVal=corrEmp.value;
+    corrEmp.innerHTML='<option value="">Todas</option>';
+    companies.forEach(co=>{
+      const o=document.createElement('option');
+      o.value=co.id;o.textContent=co.name;
+      if(co.id===curVal)o.selected=true;
+      corrEmp.appendChild(o);
+    });
+  }
+  // Fecha por defecto = hoy
+  const fechaEl=document.getElementById('corrFecha');
+  if(fechaEl&&!fechaEl.value) fechaEl.value=todayKey();
+  const fecha=fechaEl?fechaEl.value:todayKey();
+  const coFiltro=corrEmp?corrEmp.value:'';
+  const el=document.getElementById('corrList');
+  if(!el)return;
+  // Agrupar registros de esa fecha por empleado
+  const recsDelDia=records.filter(r=>r.date===fecha&&(coFiltro?r.companyId===coFiltro:true));
+  const empIds=[...new Set(recsDelDia.map(r=>r.userId))];
+  if(!empIds.length){
+    el.innerHTML='<div class="corr-empty">No hay registros para la fecha seleccionada.</div>';
+    return;
+  }
+  let html='';
+  empIds.forEach(uid=>{
+    const emp=employees.find(e=>e.id===uid);
+    const co=emp?companies.find(c=>c.id===emp.companyId):null;
+    const recs=recsDelDia.filter(r=>r.userId===uid).sort((a,b)=>a.typeIdx-b.typeIdx);
+    html+='<div style="margin-bottom:16px">';
+    html+='<div class="corr-emp-row">';
+    html+='<div>';
+    html+='<div class="corr-emp-info">'+(emp?emp.name:'Empleado desconocido')+'</div>';
+    html+='<div class="corr-emp-sub">'+(co?co.name+' · ':'')+(emp?emp.code:'')+'</div>';
+    html+='</div>';
+    html+='<button class="btn-del-rec" onclick="deleteAllRecsOfDay(\''+uid+'\',\''+fecha+'\')">🗑 BORRAR TODO EL DÍA</button>';
+    html+='</div>';
+    recs.forEach(r=>{
+      const lateStr=r.late?('<span class="cr-late">+'+r.lateMin+'min</span>'):'<span class="cr-late" style="color:var(--accent2)">OK</span>';
+      const commentStr=r.lateReason?('<span class="cr-comment">💬 '+r.lateReason+'</span>'):'<span class="cr-comment">—</span>';
+      html+='<div class="corr-rec-row">';
+      html+='<span class="cr-type">'+r.typeLabel+'</span>';
+      html+='<span class="cr-time">'+r.time+'</span>';
+      html+=lateStr;
+      html+=commentStr;
+      html+='<button class="btn-del-rec" onclick="deleteOneRec(\''+r.id+'\')">✕ ELIMINAR</button>';
+      html+='</div>';
+    });
+    html+='</div>';
+  });
+  el.innerHTML=html;
+}
+function deleteOneRec(recId){
+  if(!confirm('¿Eliminar esta marcación? El empleado podrá volver a registrarla.'))return;
+  records=records.filter(r=>r.id!==recId);
+  sv(K.records,records);
+  renderCorrecciones();
+  showToast('Marcación eliminada','s');
+}
+function deleteAllRecsOfDay(userId,fecha){
+  const emp=employees.find(e=>e.id===userId);
+  const nombre=emp?emp.name:'este empleado';
+  if(!confirm('¿Borrar TODAS las marcaciones de '+nombre+' del '+fecha+'?\nPodrá volver a registrar desde cero.'))return;
+  records=records.filter(r=>!(r.userId===userId&&r.date===fecha));
+  sv(K.records,records);
+  renderCorrecciones();
+  if(currentUser&&currentUser.id===userId){
+    updateMarcaButtons();refreshStats();renderTodayTab();checkShiftAlert();
+  }
+  showToast('Registros del día eliminados','s');
+}
+
 function generateReport(){
   const coF=document.getElementById('repEmpresa').value;
   const emF=document.getElementById('repEmpleado').value;
