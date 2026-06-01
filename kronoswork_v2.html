@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Raquetatotal — Sistema de Marcación</title>
+<title>SportHaus — Sistema de Marcación</title>
 <link href="https://fonts.googleapis.com/css2?family=Rajdhani:wght@400;500;600;700&family=Share+Tech+Mono&family=Exo+2:wght@300;400;600;800&display=swap" rel="stylesheet">
 <style>
 /* ===================== VARIABLES ===================== */
@@ -1085,12 +1085,15 @@ async function fetchRemote(){
   }catch(e){ console.warn('JSONBin fetch error:',e); return {}; }
 }
 
-// Sube todos los datos locales a JSONBin.
-// Se llama automáticamente 0.8s después de cualquier cambio del admin.
+// Sube solo la CONFIG a JSONBin (empresas, turnos, empleados, cfg, alertas).
+// Los records NO se sincronizan aquí — son demasiados y llenarían el bin.
+// Los records viven en localStorage del dispositivo + Google Sheets (copia admin).
+const CONFIG_KEYS = [K.cfg, K.companies, K.shifts, K.employees, K.ipAlerts];
+
 async function pushRemote(){
   _remoteCache = null; // invalida caché para que la próxima lectura sea fresca
   const payload = {};
-  Object.values(K).forEach(k=>{ const v=localStorage.getItem(k); payload[k]=v?JSON.parse(v):null; });
+  CONFIG_KEYS.forEach(k=>{ const v=localStorage.getItem(k); payload[k]=v?JSON.parse(v):null; });
   try{
     await fetch(JSONBIN_URL,{
       method:'PUT',
@@ -2477,33 +2480,32 @@ function showToast(msg,type='info'){
 
 // ═══════════════════════════════════════════════════════════════════
 // BLOQUE 3 — INICIO DE LA APP (INIT)
-// Antes: arrancaba directo con loadAll() (síncrono).
-// Ahora: primero descarga datos de JSONBin, los mete en localStorage,
-// y luego arranca normalmente. Así cualquier dispositivo ve siempre
-// los datos que el admin configuró, sin importar desde qué PC se abra.
+// Descarga CONFIG desde JSONBin (empresas, empleados, turnos).
+// Los records (marcaciones) NO se tocan — viven en localStorage del
+// dispositivo y en Google Sheets. Nunca se sobreescriben con datos remotos.
 //
 // SECUENCIA AL ABRIR:
-//   1. "Sincronizando datos..." 
-//   2. Descarga de JSONBin → guarda en localStorage
+//   1. "Sincronizando configuración..."
+//   2. Descarga config de JSONBin → guarda en localStorage (solo CONFIG_KEYS)
 //   3. loadAll() → carga en memoria → app lista
 // ═══════════════════════════════════════════════════════════════════
 window.addEventListener('load', async ()=>{
-  showToast('Sincronizando datos...','info');
+  showToast('Sincronizando configuración...','info');
   try{
-    // Descarga los datos actuales de JSONBin (config, empresas, empleados, turnos)
     const remote = await fetchRemote();
     let hayDatos = false;
     Object.entries(remote).forEach(([k,v])=>{
-      // Solo sobreescribe si el valor no es null (evita borrar datos locales con nulos)
-      if(v !== null){ localStorage.setItem(k, JSON.stringify(v)); hayDatos=true; }
+      // Solo aplica claves de config — NUNCA sobreescribe records locales
+      if(v !== null && CONFIG_KEYS.includes(k)){
+        localStorage.setItem(k, JSON.stringify(v));
+        hayDatos = true;
+      }
     });
-    if(hayDatos) showToast('Datos sincronizados ✓','s');
+    if(hayDatos) showToast('Configuración sincronizada ✓','s');
     else showToast('Primera vez — configura desde el panel admin','info');
   }catch(e){
-    // Sin internet: la app sigue con los datos que tenga en localStorage
     showToast('Sin conexión — usando datos locales','warn');
   }
-  // Estas líneas son iguales al original — arrancan la app normalmente
   loadAll();
   detectIP();
   populateLoginCompanies();
